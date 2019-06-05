@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_snc_message_tran.TranslatorUtils</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>TranslatorUtils</name>
+        <script><![CDATA[var TranslatorUtils = Class.create();
+TranslatorUtils.prototype = {
+	initialize: function() {
+	},
+	
+	approveTranslationRecord: function (current) {
+		
+		var lang = current.language.toString();
+		var transLogId = current.u_translation_log_id;
+		if (lang == 'XX') {
+			
+			var transLogTokenArray = transLogId.split("_");
+			if (transLogTokenArray.length != 2) {
+				gs.error('Bogus u_translation_log_id in ' + current.getRecordClassName() + ':' + current.sys_id);
+				return;
+			}
+			var translationRecordId = transLogTokenArray[1]; // Translation record ID
+			current.language = transLogTokenArray[0];
+			
+			// Must disable workflows, and only global context can do that.
+			new global.TranslatorHelper().updateWithoutWorkflow(current);
+			
+			this.updateStatusLog(translationRecordId, 1);
+		}
+	},
+	
+	isReviewComplete: function (translateRec) {
+		
+		var gr = new GlideRecord(translateRec.translation_tables);
+		gr.addQuery('u_translation_log_id', 'CONTAINS', translateRec.sys_id);
+		gr.addQuery('language', 'XX');
+		gr.query();
+		if (gr.hasNext()) {
+			return false;
+		}
+		return true;
+		
+	},
+	
+	updateStatusLog: function (translationRecordId, apprCount) {
+		
+//		gs.info(' in TranslatorUtils - updateStatusLog ... recID: ' + translationRecordId + ' apprCount: ' + apprCount);
+		
+		// Update the translation record's status log
+		var translationRec = new GlideRecord("x_snc_message_tran_message_translator_table");
+		if (translationRecordId && translationRec.get(translationRecordId)) {
+			//gs.info("Updating log");
+			
+			var reviewIsComplete = this.isReviewComplete(translationRec);
+			
+			var logString = translationRec.message_log.toString();
+			if (logString.indexOf("approved") == -1) {
+				//gs.info("New update to log");
+				// First time updating the status log.
+				// The word in the indexOf, approved, must be in the new line below
+				var newLine = apprCount + " translations approved.";
+				logString = logString + "\n" + newLine;
+				translationRec.approved_message_count = apprCount;
+			}
+			else {
+				//gs.info("Refresh of log");
+				// The number of approvals MUST BE first on last line
+				// "Please review and approve for accuracy." must be the second line
+				var logLines = logString.split("\n");
+				var approvalLogTokenArray = logLines[logLines.length -1].split(" ");
+				var approvalCount = parseInt(approvalLogTokenArray[0]);
+				approvalCount += apprCount;
+				approvalLogTokenArray[0] = approvalCount;
+				var approvalLogString = approvalLogTokenArray.join(" ");
+				logLines[logLines.length -1] = approvalLogString;
+				if (reviewIsComplete) {
+					for (var x = 0; x < logLines.length; x++) {
+						if (logLines[x].indexOf("Please review") != -1) {
+							if (logLines[x+1] && logLines[x+1] == "")
+								logLines.splice(x, 2);
+							else
+								logLines.splice(x, 1); // Remove Please review message
+						}
+					}
+				}
+				logString = logLines.join("\n");
+				translationRec.approved_message_count = approvalCount;
+			}
+//			gs.info('before update .. transrec approved count = ' + translationRec.approved_message_count);
+			translationRec.message_log = logString;
+			if (reviewIsComplete)
+				translationRec.state = "Complete";
+			translationRec.setWorkflow(false);
+			translationRec.update();
+			
+		}
+	},
+	
+	getTranslationTableStats: function (tableName, tableLabel) {
+		
+		// Assumes tableName is an i18n table (i.e. it has a language field)
+		// Returns a status string
+		
+		var languageAccounting = '';
+		var returnString = '';
+		var languageCount = 0;
+		var totalMessageCount = 0;
+		var defaulLangMessageCount = 0;
+		
+		// Display Language counts for the selected table
+		var count = new GlideAggregate(tableName);
+		
+		count.addAggregate('COUNT', 'language');
+		count.query();
+		while (count.next()) {
+			var language = count.language;
+			var lName = new GlideRecord('sys_language');   //lookup lanugage name
+			if (lName.get('id', language) || language == 'en') {
+				
+				languageCount++;
+				
+				// Filter out any unreviewed messages, which will have an undefined language id.
+				if(language == 'en') {
+					lName.name = "English";
+				}
+				
+				var messageCount = count.getAggregate('COUNT', 'language');
+				if ("English" == lName.name)
+					defaulLangMessageCount = messageCount;
+				totalMessageCount += parseInt(messageCount);
+				if (languageCount > 1) {
+					languageAccounting += ',';
+				}
+				languageAccounting += " " + messageCount + " " + lName.name + " (" + language + ")";
+				
+			}
+			returnString = "There are currently " + totalMessageCount + " messages in the '" + tableLabel + "' table:" + languageAccounting +".\n";
+			
+		}
+		var custom = new GlideAggregate(tableName);
+		custom.addQuery('language', 'en');
+		//	custom.addQuery('sys_customer_update', 'true');
+		custom.addQuery('sys_updated_on', '>=', gs.daysAgo(30));
+		custom.addAggregate('COUNT');
+		custom.query();
+		var messages = 0;
+		if (custom.next())
+			messages = custom.getAggregate('COUNT');
+		
+		returnString += messages + " English messages have been updated in the last 30 days.\n";
+		returnString += "All " + defaulLangMessageCount + " English records are selected for translation.";
+		return returnString;
+	},
+	
+	type: 'TranslatorUtils'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>dave.knight</sys_created_by>
+        <sys_created_on>2016-10-01 16:07:36</sys_created_on>
+        <sys_customer_update>true</sys_customer_update>
+        <sys_id>70868600131ae6001cdf5aef3244b0a6</sys_id>
+        <sys_mod_count>40</sys_mod_count>
+        <sys_name>TranslatorUtils</sys_name>
+        <sys_package display_value="Message Translator" source="x_snc_message_tran">c417988c13cea2001cdf5aef3244b0a8</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Message Translator">c417988c13cea2001cdf5aef3244b0a8</sys_scope>
+        <sys_update_name>sys_script_include_70868600131ae6001cdf5aef3244b0a6</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2016-10-10 13:35:35</sys_updated_on>
+    </sys_script_include>
+</record_update>

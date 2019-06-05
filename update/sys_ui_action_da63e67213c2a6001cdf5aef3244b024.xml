@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name>translate_kickoff</action_name>
+        <active>true</active>
+        <client>true</client>
+        <client_script_v2/>
+        <comments/>
+        <condition>current.canCreate()</condition>
+        <form_action>true</form_action>
+        <form_button>true</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>false</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style/>
+        <hint>Translate reqested messages</hint>
+        <isolate_script>false</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <list_style/>
+        <name>Translate</name>
+        <onclick>saveConditionField()</onclick>
+        <order>200</order>
+        <script><![CDATA[function saveConditionField() {
+	
+	// HACK!
+	//
+	// For some reason current.conditions is being clipped on the way down to the server during
+	// a normal UI Action submit.
+	//
+	// This is an example. The following condition, 
+	// sys_updated_onONLast month@javascript:gs.beginningOfLastMonth()@javascript:gs.endOfLastMonth()
+	// is being clipped to sys_updated_onONLast month@javascript:gs.
+	// (Length is truncated to 41 characters.)
+	// It is as if there is code somewhere in the 'conditions' field logic that sees 'javascript' 
+	// and prunes any calls to gs methods. (Perhaps it is a scoping bug?)
+	//
+	// To work around it, I created a normal String field called condition_buffer.
+	// It is not a Conditions field. It's a plain String field. I'm pushing the 
+	// condition string into that field before the submit. That guy is getting to the server fine.
+	// Note that the condition_buffer field has to be on the form for this to work. To keep it hidden,
+	// I'm using a UI Policy.
+	
+	var previewCount = g_form.getIntValue('requested_message_count');
+	if(previewCount < 1) {
+		alert("No Records Previewed, or selected Conditions returned 0 records to Translate.\n \n Please use [Preview] and verify your conditions are met before running [Translate]. ");
+	    return;	
+	}
+	var maxTransCount = g_form.getIntValue('max_translate_count');
+	if(previewCount > maxTransCount) {
+		alert("Selected conditions produced a record count greater than the system translate count (" + maxTransCount + ").\n \n Please update your conditions and use [Preview] to verify  ");
+	    return;	
+	}
+		
+	var query = g_form.getValue('conditions');
+	g_form.setValue('condition_buffer', query);
+	gsftSubmit(null, g_form.getFormElement(), "translate_kickoff"); // Needed to kickoff standard UI Action
+}
+
+
+if (typeof window == 'undefined')
+	runServerStuff();
+
+function runServerStuff() {
+	current.state="Translating";
+	answer = current.insert();
+	action.setRedirectURL(current);
+}]]></script>
+        <show_insert>true</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>false</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2016-09-27 20:56:38</sys_created_on>
+        <sys_customer_update>true</sys_customer_update>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>da63e67213c2a6001cdf5aef3244b024</sys_id>
+        <sys_mod_count>66</sys_mod_count>
+        <sys_name>Translate</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Message Translator" source="x_snc_message_tran">c417988c13cea2001cdf5aef3244b0a8</sys_package>
+        <sys_policy/>
+        <sys_replace_on_upgrade>false</sys_replace_on_upgrade>
+        <sys_scope display_value="Message Translator">c417988c13cea2001cdf5aef3244b0a8</sys_scope>
+        <sys_update_name>sys_ui_action_da63e67213c2a6001cdf5aef3244b024</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2016-10-07 17:21:34</sys_updated_on>
+        <table>x_snc_message_tran_message_translator_table</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>false</ui16_compatible>
+    </sys_ui_action>
+</record_update>
